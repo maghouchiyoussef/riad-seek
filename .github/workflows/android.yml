@@ -5,6 +5,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+concurrency:
+  group: android-build
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,18 +27,24 @@ jobs:
         run: |
           npm ci
           npx cap sync android
-      - name: Build release bundle (unsigned) and debug APK
+      - name: Build release bundle (real ads)
         working-directory: app/android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon bundleRelease assembleDebug
+          ./gradlew --no-daemon bundleRelease
+      - name: Build debug APK (test ads)
+        working-directory: app
+        run: |
+          sed -i "s/TEST_MODE: false/TEST_MODE: true/" www/js/ads-config.js
+          npx cap copy android
+          cd android && ./gradlew --no-daemon assembleDebug
       - name: Publish build to "builds" branch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir out
           cp app/android/app/build/outputs/bundle/release/app-release.aab out/riadseek-unsigned.aab
-          cp app/android/app/build/outputs/apk/debug/app-debug.apk out/riadseek-debug.apk
+          cp app/android/app/build/outputs/apk/debug/app-debug.apk out/riadseek-debug-testads.apk
           echo "${{ github.run_number }}" > out/BUILD
           cd out
           git init -q -b builds
